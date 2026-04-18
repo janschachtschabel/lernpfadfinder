@@ -25,7 +25,9 @@ body {
 .rf-edge-applies { stroke: #10b981; stroke-width: 2; }
 .rf-edge-related { stroke: #9ca3af; stroke-dasharray: 4 4; }
 
+.print-only { display: none; }
 @media print {
   .no-print { display: none !important; }
+  .print-only { display: block !important; }
   body { background: white; }
 }

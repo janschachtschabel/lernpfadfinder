@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       model: MODELS.tts,
       voice: MODELS.voice as any,
       input: text,
-      format: 'mp3',
+      response_format: 'mp3',
     });
     const buffer = Buffer.from(await resp.arrayBuffer());
     return new NextResponse(buffer, {

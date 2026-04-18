@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { VoiceButton, speak } from './VoiceButton';
+import type { DisambiguationOption } from '@/lib/types';
 
 export function WelcomeScreen() {
   const [text, setText] = useState('');
@@ -14,28 +15,37 @@ export function WelcomeScreen() {
   const setTarget = useStore(s => s.setTarget);
 
   useEffect(() => {
-    // greet on first render
-    const greet = 'Willkommen beim WissenLebtOnline Lernpfadfinder. Was möchtest du lernen?';
+    const greet = 'Willkommen bei Deinem Lernpfadfinder. Was möchtest du lernen?';
     const t = setTimeout(() => speak(greet), 400);
     return () => clearTimeout(t);
   }, []);
+
+  const pick = (opt: DisambiguationOption) => {
+    setTarget(opt);
+    setPhase('baseline');
+  };
 
   const search = async (q: string) => {
     const query = q.trim();
     if (!query) return;
     setUserQuery(query);
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setCandidates([]);
     try {
-      const res = await fetch(`/api/resolve?q=${encodeURIComponent(query)}`);
+      const res = await fetch('/api/disambiguate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ term: query }),
+      });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Suche fehlgeschlagen');
-      setCandidates(json.hits ?? []);
-      if ((json.hits ?? []).length === 1) {
-        const only = json.hits[0];
-        setTarget(only);
-        setPhase('graph');
-      } else if ((json.hits ?? []).length === 0) {
-        setError('Keine Treffer in Wikidata – bitte anderen Begriff probieren.');
+      if (!res.ok) throw new Error(json.error ?? 'Anfrage fehlgeschlagen');
+      const options: DisambiguationOption[] = json.options ?? [];
+      if (options.length === 0) {
+        // Fallback: treat the raw query as the topic.
+        pick({ label: query, description: '', field: '' });
+      } else if (options.length === 1) {
+        pick(options[0]);
+      } else {
+        setCandidates(options);
       }
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -51,10 +61,10 @@ export function WelcomeScreen() {
           📚
         </div>
         <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-4">
-          WissenLebtOnline <span className="text-brand-600">Lernpfadfinder</span>
+          Dein <span className="text-brand-600">Lernpfadfinder</span>
         </h1>
         <p className="text-lg text-slate-600 mb-10">
-          Sag mir dein Lernziel – ich baue dir einen Themengraphen aus Wikidata und schlage eine Lernreihenfolge vor.
+          Sag mir dein Lernziel – ich zerlege es in Teilthemen, finde die Voraussetzungen und schlage dir eine persönliche Lernreihenfolge vor.
         </p>
 
         <form
@@ -80,18 +90,19 @@ export function WelcomeScreen() {
           </button>
         </form>
 
-        {candidates.length > 1 && (
+        {candidates.length > 0 && (
           <div className="mt-6 bg-white rounded-2xl shadow-lg border border-brand-100 p-4 text-left animate-fade-in">
-            <p className="text-sm text-slate-500 mb-3">Welches Thema meinst du genau?</p>
+            <p className="text-sm text-slate-500 mb-3">Welche Bedeutung meinst du?</p>
             <div className="grid gap-2">
-              {candidates.map(c => (
+              {candidates.map((c, i) => (
                 <button
-                  key={c.id}
-                  onClick={() => { setTarget(c); setPhase('graph'); }}
+                  key={i}
+                  onClick={() => pick(c)}
                   className="text-left px-4 py-3 rounded-xl hover:bg-brand-50 border border-slate-100 transition"
                 >
-                  <div className="font-medium text-slate-900">{c.label}
-                    <span className="ml-2 text-xs text-slate-400">{c.id}</span>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="font-medium text-slate-900">{c.label}</div>
+                    <div className="text-xs text-brand-700 bg-brand-50 rounded px-2 py-0.5">{c.field}</div>
                   </div>
                   {c.description && <div className="text-sm text-slate-500 mt-1">{c.description}</div>}
                 </button>
@@ -100,7 +111,7 @@ export function WelcomeScreen() {
           </div>
         )}
       </div>
-      <div className="mt-12 text-xs text-slate-400">Powered by Wikidata · OpenAI · WirLernenOnline</div>
+      <div className="mt-12 text-xs text-slate-400">Powered by OpenAI</div>
     </div>
   );
 }
